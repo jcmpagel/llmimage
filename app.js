@@ -130,8 +130,8 @@ async function searchWikimediaImages(searchTerm) {
     log(`Searching Wikimedia for: ${searchTerm}`);
     
     const encodedSearchTerm = encodeURIComponent(searchTerm);
-    // Modified query to focus on higher quality images but without language restriction
-    const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodedSearchTerm}+filetype:bitmap|drawing&srnamespace=6&format=json&origin=*&srlimit=3`;
+    // Modified query to exclude GIFs and focus on higher quality images
+    const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodedSearchTerm}+filetype:bitmap|drawing+-filetype:gif&srnamespace=6&format=json&origin=*&srlimit=3`;
     
     try {
         const response = await fetch(apiUrl);
@@ -333,39 +333,108 @@ async function getImageDetails(imageTitle) {
             const imageDetails = (await Promise.all(imageDetailsPromises)).filter(Boolean);
             
             log(`Successfully retrieved details for ${imageDetails.length} images`);
+// Function to check if an image is within size limits
+// Function to check if an image is within size limits
+async function checkImageSize(url) {
+    log(`Checking size for image: ${url}`);
+    
+    try {
+        const response = await fetch(url, { method: 'HEAD' });
+        if (!response.ok) {
+            throw new Error(`Failed to check image size: ${response.statusText}`);
+        }
+        
+        const contentLength = response.headers.get('content-length');
+        if (!contentLength) {
+            log('Content-Length header not available, proceeding with caution');
+            return true; // Proceed if we can't determine size
+        }
+        
+        const sizeInBytes = parseInt(contentLength, 10);
+        const sizeInMB = sizeInBytes / (1024 * 1024);
+        
+        log(`Image size: ${sizeInMB.toFixed(2)} MB`);
+        
+        // Return true if image is under 0.5MB to be more conservative
+        return sizeInMB <= 0.5;
+    } catch (error) {
+        log(`Error checking image size: ${error.message}`);
+        return false; // Skip image if we can't check size
+    }
+}
 
-            // Process each image (convert SVGs to PNGs if needed)
-            const processedImages = [];
-            for (const img of imageDetails) {
-                try {
-                    let base64;
-                    const fileName = img.title.replace(/\s+/g, '_').toLowerCase();
-                    
-                    if (img.url.endsWith('.svg')) {
-                        base64 = await svgToPng(img.url);
-                        img.title = fileName.replace('.svg', '.png');
-                    } else {
-                        base64 = await getImageBase64(img.url);
-                        img.title = fileName;
-                    }
-                    
-                    img.base64 = base64;
-                    processedImages.push(img);
-                    
-                    // Show preview of the image
-                    const imgDiv = document.createElement('div');
-                    imgDiv.className = 'image-item';
-                    imgDiv.innerHTML = `
-                        <img src="${base64}" alt="${img.altText}">
-                        <p>${img.title}</p>
-                    `;
-                    imagePreview.appendChild(imgDiv);
-                } catch (error) {
-                    log(`Error processing image ${img.title}: ${error.message}`);
-                }
-            }
-            
-            log(`Successfully processed ${processedImages.length} images`);
+// Add this function to track total payload size
+function estimateBase64Size(base64String) {
+    // Remove the data:image/... prefix if present
+    const base64Data = base64String.split(',')[1] || base64String;
+    // Rough estimate: base64 encoded data is about 4/3 the size of binary
+    return Math.ceil((base64Data.length * 3) / 4);
+}
+
+// Process each image (convert SVGs to PNGs if needed)
+const processedImages = [];
+let totalPayloadSize = 0;
+const MAX_PAYLOAD_SIZE = 15 * 1024 * 1024; // 15MB to be safe (Gemini limit is 20MB)
+
+for (const img of imageDetails) {
+    try {
+        // Skip GIF files
+        if (img.url.toLowerCase().endsWith('.gif')) {
+            log(`Skipping GIF file: ${img.title}`);
+            continue;
+        }
+        
+        // Check image size - skip if over 0.5MB
+        const isWithinSizeLimit = await checkImageSize(img.url);
+        if (!isWithinSizeLimit) {
+            log(`Skipping oversized image: ${img.title} (exceeds 0.5MB)`);
+            continue;
+        }
+        
+        let base64;
+        const fileName = img.title.replace(/\s+/g, '_').toLowerCase();
+        
+        if (img.url.endsWith('.svg')) {
+            base64 = await svgToPng(img.url);
+            img.title = fileName.replace('.svg', '.png');
+        } else {
+            base64 = await getImageBase64(img.url);
+            img.title = fileName;
+        }
+        
+        // Check if adding this image would exceed our payload limit
+        const imageSize = estimateBase64Size(base64);
+        if (totalPayloadSize + imageSize > MAX_PAYLOAD_SIZE) {
+            log(`Skipping image ${img.title}: would exceed total payload limit`);
+            continue;
+        }
+        
+        totalPayloadSize += imageSize;
+        log(`Added image ${img.title}, size: ${(imageSize / (1024 * 1024)).toFixed(2)}MB, total: ${(totalPayloadSize / (1024 * 1024)).toFixed(2)}MB`);
+        
+        img.base64 = base64;
+        processedImages.push(img);
+        
+        // Show preview of the image
+        const imgDiv = document.createElement('div');
+        imgDiv.className = 'image-item';
+        imgDiv.innerHTML = `
+            <img src="${base64}" alt="${img.altText}">
+            <p>${img.title}</p>
+        `;
+        imagePreview.appendChild(imgDiv);
+    } catch (error) {
+        log(`Error processing image ${img.title}: ${error.message}`);
+    }
+}
+
+// Limit to a maximum of 8 images in case we still have too many
+if (processedImages.length > 8) {
+    log(`Limiting from ${processedImages.length} to 8 images to reduce payload size`);
+    processedImages.splice(8);
+}
+
+log(`Successfully processed ${processedImages.length} images with total payload size: ${(totalPayloadSize / (1024 * 1024)).toFixed(2)}MB`);
             
 // This section should be properly indented within the processQuestion function
 // Analyze images with Gemini
