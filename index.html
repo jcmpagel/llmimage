@@ -7,6 +7,36 @@
     <title>Wikimedia Image-Enhanced Q&A Tool</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        <meta name="theme-color" content="#4285f4">
+        <style>
+            /* Mobile optimizations */
+            @media (max-width: 768px) {
+                body {
+                    padding: 15px;
+                    font-size: 16px;
+                }
+                
+                #user-question {
+                    font-size: 16px; /* Prevent zoom on iOS when focusing */
+                }
+                
+                #submit-btn {
+                    width: 100%;
+                    padding: 12px;
+                    margin-top: 10px;
+                    font-size: 16px;
+                }
+                
+                .image-item {
+                    max-width: 100%;
+                }
+                
+                #response-container img {
+                    max-width: 100%;
+                    height: auto;
+                }
+            }
+        </style>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -122,6 +152,27 @@
 </head>
 <body>
     <h1>Wikimedia Image-Enhanced Q&A Tool</h1>
+    <div class="user-guide">
+        <p>Ask any question and get an answer with relevant images from Wikimedia Commons. For example:</p>
+        <ul>
+            <li>How does photosynthesis work?</li>
+            <li>Explain the water cycle</li>
+            <li>Show me different types of cloud formations</li>
+        </ul>
+    </div>
+    
+    <style>
+        .user-guide {
+            background-color: #f0f8ff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4285f4;
+        }
+        .user-guide ul {
+            margin-bottom: 0;
+        }
+    </style>
     
     <div id="question-form">
         <textarea id="user-question" rows="3" placeholder="Enter your question here..."></textarea>
@@ -132,6 +183,43 @@
     <div id="loading">Processing your question...</div>
     
     <div id="response-container"></div>
+
+    <div class="how-it-works">
+        <h3>How it Works <button id="toggle-info" class="toggle-btn">Show</button></h3>
+        <div id="info-container" style="display: none;">
+            <ol>
+                <li><strong>Search Term Generation:</strong> When you submit a question, the app uses Gemini AI to generate relevant search terms.</li>
+                <li><strong>Image Retrieval:</strong> These search terms are used to find relevant images from Wikimedia Commons.</li>
+                <li><strong>Image Analysis:</strong> Gemini AI analyzes the images alongside your question to create a visual response.</li>
+                <li><strong>Response Generation:</strong> The AI creates an answer that incorporates relevant images with explanatory text.</li>
+            </ol>
+            <p><strong>Privacy Note:</strong> Your API key is used only for API calls and is not stored beyond your current session.</p>
+        </div>
+    </div>
+    
+    <style>
+        .how-it-works {
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .how-it-works h3 {
+            margin-top: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .toggle-btn {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
     
     <div class="debug-section">
         <h3>Debug Log</h3>
@@ -144,5 +232,6 @@
     </div>
 
     <script src="app.js"></script>
+    
 </body>
 </html>

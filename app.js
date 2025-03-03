@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function getSearchTerms(question, apiKey) {
         log(`Getting search terms for question: ${question}`);
         
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
         const requestData = {
             contents: [{
                 parts: [{
@@ -311,16 +311,15 @@ async function getImageDetails(imageTitle) {
             log(`Using search terms: ${searchTerms.join(', ')}`);
             
             // Search Wikimedia for each term and collect results
-            let allImageResults = [];
-            for (const term of searchTerms) {
-                const results = await searchWikimediaImages(term);
-                allImageResults = allImageResults.concat(results);
-                
-                // Limit to 10 images total for performance
-                if (allImageResults.length >= 10) {
-                    allImageResults = allImageResults.slice(0, 10);
-                    break;
-                }
+            log(`Searching Wikimedia for all terms in parallel`);
+            const searchPromises = searchTerms.map(term => searchWikimediaImages(term));
+            const searchResults = await Promise.all(searchPromises);
+            
+            // Flatten and limit results
+            let allImageResults = searchResults.flat();
+            if (allImageResults.length > 15) {
+                log(`Limiting results to 10 images from ${allImageResults.length} total results`);
+                allImageResults = allImageResults.slice(0, 15);
             }
             
             if (allImageResults.length === 0) {
@@ -484,4 +483,17 @@ log('Question processing completed successfully!');
     });
     
     log('Application initialized and ready!');
+
+    const toggleInfoBtn = document.getElementById('toggle-info');
+const infoContainer = document.getElementById('info-container');
+    
+toggleInfoBtn.addEventListener('click', () => {
+    if (infoContainer.style.display === 'none') {
+        infoContainer.style.display = 'block';
+        toggleInfoBtn.textContent = 'Hide';
+    } else {
+        infoContainer.style.display = 'none';
+        toggleInfoBtn.textContent = 'Show';
+    }
+});
 });
