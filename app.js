@@ -374,19 +374,52 @@ const UIController = (() => {
         });
     };
     
-    // Show loading state
+    const updateButtonState = (state) => {
+        const button = elements.submitBtn;
+        
+        // Reset all classes
+        button.classList.remove('btn-processing', 'btn-finding', 'btn-analyzing');
+        
+        switch(state) {
+            case 'initial':
+                button.disabled = false;
+                button.textContent = 'Ask Question';
+                break;
+            case 'processing':
+                button.disabled = true;
+                button.textContent = 'Generating Search Terms...';
+                button.classList.add('btn-processing');
+                break;
+            case 'finding':
+                button.disabled = true;
+                button.textContent = 'Finding Images...';
+                button.classList.add('btn-finding');
+                break;
+            case 'analyzing':
+                button.disabled = true;
+                button.textContent = 'Creating Response...';
+                button.classList.add('btn-analyzing');
+                break;
+            default:
+                button.disabled = false;
+                button.textContent = 'Ask Question';
+        }
+    };
+    
+    // Update showLoading function
     const showLoading = () => {
         elements.responseContainer.innerHTML = '';
         elements.loadingDiv.style.display = 'block';
         elements.debugLog.innerHTML = '';
         elements.imagePreview.innerHTML = '';
+        updateButtonState('processing');
     };
     
-    // Hide loading state
+    // Update hideLoading function
     const hideLoading = () => {
         elements.loadingDiv.style.display = 'none';
+        updateButtonState('initial');
     };
-    
     // Display error message
     const showError = (message) => {
         elements.responseContainer.innerHTML = `<p class="error">Error: ${message}</p>`;
@@ -405,6 +438,7 @@ const UIController = (() => {
     
     // Format and display the final response
 // Format and display the final response
+// Update the displayResponse function in UIController to add scrolling
 const displayResponse = (question, formattedResponse) => {
     const shareButtonsHtml = `
         <div class="share-buttons" style="margin-top: 20px;">
@@ -457,16 +491,29 @@ const displayResponse = (question, formattedResponse) => {
             Logger.log(`Error rendering math: ${err.message}`);
         });
     }
+
+    // Scroll to the response container with a smooth animation
+    elements.responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // Highlight the response container briefly to draw attention
+    elements.responseContainer.style.transition = 'background-color 1s';
+    elements.responseContainer.style.backgroundColor = '#f0f8ff'; // Light blue highlight
+    
+    // Remove the highlight after 1.5 seconds
+    setTimeout(() => {
+        elements.responseContainer.style.backgroundColor = '#fafafa'; // Return to original color
+    }, 1500);
 };
     
-    return { 
-        init, 
-        showLoading, 
-        hideLoading, 
-        showError, 
-        addImagePreview, 
-        displayResponse 
-    };
+return { 
+    init, 
+    showLoading, 
+    hideLoading, 
+    showError, 
+    addImagePreview, 
+    displayResponse,
+    updateButtonState // Add this to the return object
+};
 })();
 
 // App Controller - Main application logic
@@ -521,17 +568,20 @@ const AppController = (() => {
     // Process user's question
     const processQuestion = async (question, apiKey, modelName) => {
         try {
-            UIController.showLoading();
+            UIController.showLoading(); // Sets to "processing" state
             
             Logger.log(`Processing question: ${question}`);
             
             if (!apiKey) {
                 throw new Error('API key is required');
             }
-
+    
             // Get search terms from Gemini
             const searchTerms = await GeminiAPI.getSearchTerms(question, apiKey);
             Logger.log(`Using search terms: ${searchTerms.join(', ')}`);
+            
+            // Update UI state to "finding"
+            UIController.updateButtonState('finding');
             
             // Search Wikimedia for each term and collect results
             Logger.log(`Searching Wikimedia for all terms in parallel`);
@@ -550,24 +600,26 @@ const AppController = (() => {
             }
             
             Logger.log(`Found ${allImageResults.length} total image results`);
-
+    
             // Get details for each image
             const imageDetailsPromises = allImageResults.map(img => WikimediaAPI.getImageDetails(img.title));
             const imageDetails = (await Promise.all(imageDetailsPromises)).filter(Boolean);
             
             Logger.log(`Successfully retrieved details for ${imageDetails.length} images`);
-
+    
             // Process each image (convert SVGs to PNGs if needed)
             const processedImages = await processImages(imageDetails);
             
-            // Analyze images with Gemini
+            // Update UI state to "analyzing"
+            UIController.updateButtonState('analyzing');
+            
             // Analyze images with Gemini
             const geminiResponse = await GeminiAPI.analyzeImages(question, processedImages, apiKey, modelName);
             
             // Format the response
             const formattedResponse = formatResponse(geminiResponse, processedImages);
         
-            // Display the response - now pass the question too
+            // Display the response
             UIController.displayResponse(question, formattedResponse);
             
             Logger.log('Question processing completed successfully!');
@@ -677,10 +729,9 @@ const AppController = (() => {
             });
             
             if (img) {
-                // Create an array of caption elements that will be filtered to remove empty ones
+                // Create a cleaner caption by removing the alt text from visual display
+                // and only showing source and attribution
                 const captionElements = [
-                    img.altText ? `${img.altText}` : null,
-                    
                     // License info with source prefix only if license is available
                     img.license && img.license !== 'Unknown license' 
                         ? `<small>Source: Wikimedia Commons - ${img.license}</small>` 
@@ -695,11 +746,17 @@ const AppController = (() => {
                 // Filter out null/empty elements and join with line breaks
                 const figcaption = captionElements
                     .filter(element => element !== null)
+                    .map(element => {
+                        // Decode HTML entities that might be present in the text
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = element;
+                        return tempDiv.innerHTML;
+                    })
                     .join('<br>');
                 
                 // Use the original Wikimedia URL instead of base64
                 const imgTag = `<figure style="margin: 20px 0;">
-                    <img src="${img.url}" alt="${img.altText || 'Image from Wikimedia Commons'}" style="max-width:100%; border-radius:5px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                    <img src="${img.url}" alt="${img.altText || 'Image from Wikimedia Commons'}" style="width:100%; border-radius:5px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
                     <figcaption style="font-style:italic; font-size:0.9em; color:#555; margin-top:5px;">
                         ${figcaption}
                     </figcaption>

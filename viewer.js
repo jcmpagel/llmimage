@@ -6,13 +6,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     const questionElement = document.getElementById('question');
     const responseElement = document.getElementById('response');
     
+    // Define helper functions first
+    function showError(message) {
+        loadingElement.style.display = 'none';
+        errorElement.style.display = 'block';
+        errorElement.textContent = message;
+    }
+    
+    const incrementViewCount = async (shareId) => {
+        try {
+            await supabase.rpc('increment_view', { share_id_param: shareId });
+            console.log('View count incremented');
+        } catch (error) {
+            console.error('Error incrementing view count:', error);
+        }
+    };
+    
     // Initialize Supabase client
     const SUPABASE_URL = 'https://werpauotigxjkcpfepyx.supabase.co'; // You'll need to replace this
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlcnBhdW90aWd4amtjcGZlcHl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEwMTk3MTIsImV4cCI6MjA1NjU5NTcxMn0._s_qAe73bGXEWuI-_ICGZ_AyHb8QN9VZ3fpuSYgG5mM'; // You'll need to replace this
     
     let supabase;
     try {
-        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     } catch (error) {
         showError('Error initializing Supabase client.');
         return;
@@ -66,19 +82,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         showError(`Error loading shared content: ${error.message}`);
     }
-    
-    function showError(message) {
-        loadingElement.style.display = 'none';
-        errorElement.style.display = 'block';
-        errorElement.textContent = message;
-    }
-    
-    const incrementViewCount = async (shareId) => {
-        try {
-            await supabase.rpc('increment_view', { share_id_param: shareId });
-            console.log('View count incremented');
-        } catch (error) {
-            console.error('Error incrementing view count:', error);
-        }
-    };
 });
