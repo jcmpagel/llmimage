@@ -462,22 +462,21 @@ const UIController = (() => {
             AppController.processQuestion(question, apiKey, selectedModel);
         });
         
-        // Add proxy toggle functionality if it exists
         if (elements.useProxyToggle) {
             elements.useProxyToggle.addEventListener('change', (e) => {
                 const apiKeyField = elements.apiKeyInput;
-                const apiKeyContainer = apiKeyField.parentElement;
+                const apiKeyLabel = apiKeyField.parentElement.querySelector('label');
                 
                 if (e.target.checked) {
-                    // Using proxy, make API key optional
+                    // Using proxy, API key is optional
                     apiKeyField.required = false;
-                    apiKeyContainer.classList.remove('required-field');
-                    apiKeyContainer.querySelector('label').innerHTML = 'API Key (optional)';
+                    apiKeyLabel.innerHTML = 'API Key (optional)';
+                    apiKeyField.placeholder = 'Optional when using proxy';
                 } else {
-                    // Not using proxy, make API key required
+                    // Not using proxy, API key is required
                     apiKeyField.required = true;
-                    apiKeyContainer.classList.add('required-field');
-                    apiKeyContainer.querySelector('label').innerHTML = 'API Key (required)';
+                    apiKeyLabel.innerHTML = 'API Key (required)';
+                    apiKeyField.placeholder = 'Required for direct API access';
                 }
             });
             

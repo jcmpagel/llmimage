@@ -14,6 +14,24 @@
     
     <style>
         /* Base Styling */
+        .proxy-toggle {
+    margin: 15px 0;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    margin: 0;
+}
+
+.toggle-text {
+    margin-left: 8px;
+}
+
+#use-proxy-toggle {
+    transform: scale(1.2);
+}
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -470,14 +488,13 @@ input:checked + .slider:before {
                 </div>
             </form>
             
-            <div class="form-group">
-                <label for="use-proxy-toggle">Use My API Key, maybe out of limit</label>
-                <div class="toggle-switch">
-                  <input type="checkbox" id="use-proxy-toggle" checked>
-                  <span class="slider round"></span>
-                </div>
-                <small>When enabled, you can use the app without your own API key (subject to rate limits)</small>
-              </div>
+            <div class="form-group proxy-toggle">
+                <label for="use-proxy-toggle" class="toggle-label">
+                    <input type="checkbox" id="use-proxy-toggle" checked>
+                    <span class="toggle-text">Use shared API (maybe reached limit)</span>
+                </label>
+                <small class="form-text text-muted">Uncheck to use your own</small>
+            </div>
         </section>
         <div class="form-group">
             <label for="model-selector">Select Gemini Model:</label>
