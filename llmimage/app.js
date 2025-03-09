@@ -433,7 +433,6 @@ const GeminiAPI = (() => {
 const UIController = (() => {
     let elements = {};
     
-    // Update the UIController.init method
     const init = (elementIds) => {
         elements = elementIds;
         
@@ -463,6 +462,11 @@ const UIController = (() => {
         });
         
         if (elements.useProxyToggle) {
+            // Default to checked if not already set
+            if (elements.useProxyToggle.checked === undefined) {
+                elements.useProxyToggle.checked = true;
+            }
+            
             elements.useProxyToggle.addEventListener('change', (e) => {
                 const apiKeyField = elements.apiKeyInput;
                 const apiKeyLabel = apiKeyField.parentElement.querySelector('label');
@@ -480,10 +484,10 @@ const UIController = (() => {
                 }
             });
             
-            // Trigger the change event to set the initial state
-            elements.useProxyToggle.dispatchEvent(new Event('change'));
-        }
-        
+            // Manually trigger the change event to set the initial state
+            const event = new Event('change');
+            elements.useProxyToggle.dispatchEvent(event);
+        }    
         elements.toggleInfoBtn.addEventListener('click', () => {
             if (elements.infoContainer.style.display === 'none') {
                 elements.infoContainer.style.display = 'block';
@@ -915,13 +919,31 @@ document.addEventListener('DOMContentLoaded', () => {
         apiKeyInput: document.getElementById('api-key'),
         toggleInfoBtn: document.getElementById('toggle-info'),
         infoContainer: document.getElementById('info-container'),
-        modelSelector: document.getElementById('model-selector'), // Add this line
+        modelSelector: document.getElementById('model-selector'),
         useProxyToggle: document.getElementById('use-proxy-toggle')
     };
     
     // Initialize modules
     Logger.init(elements.debugLog);
     UIController.init(elements);
+    
+    // Make sure proxy is properly initialized on page load
+    if (elements.useProxyToggle) {
+        // Default to checked/true if available
+        elements.useProxyToggle.checked = true;
+        
+        // Manually update UI to match proxy state
+        const apiKeyField = elements.apiKeyInput;
+        const apiKeyLabel = apiKeyField.parentElement.querySelector('label');
+        
+        // Set API key as optional when using proxy (default)
+        apiKeyField.required = false;
+        apiKeyLabel.innerHTML = 'API Key (optional)';
+        apiKeyField.placeholder = 'Optional when using proxy';
+        
+        // Ensure GeminiAPI knows we're using the proxy by default
+        GeminiAPI.setUseProxy(true);
+    }
     
     Logger.log('Application initialized and ready!');
 });
