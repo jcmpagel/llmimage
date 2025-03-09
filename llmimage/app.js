@@ -227,11 +227,12 @@ const WikimediaAPI = (() => {
     return { searchImages, getImageDetails };
 })();
 
-// GeminiAPI Module - Handles interactions with Gemini API
+
 // GeminiAPI Module - Handles interactions with Gemini API
 const GeminiAPI = (() => {
     // Flag to track if we're using the proxy or direct API
     let usingProxy = true;
+    const PROXY_URL = 'https://tight-brook-3d83.jcmpagel.workers.dev/generateContent';
     
     // Get search terms from Gemini API
     const getSearchTerms = async (question, apiKey) => {
@@ -246,13 +247,12 @@ const GeminiAPI = (() => {
             }]
         };
         
-        // Try the proxy first if no API key is provided
+        // Try the proxy first if enabled
         if (usingProxy) {
             try {
                 Logger.log("Attempting to use API proxy...");
-                const proxyUrl = '/api/generateContent'; // Your Cloudflare Worker route
                 
-                const response = await fetch(proxyUrl, {
+                const response = await fetch(PROXY_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -277,45 +277,42 @@ const GeminiAPI = (() => {
             } catch (error) {
                 Logger.log(`Proxy request failed: ${error.message}`);
                 Logger.log("Falling back to direct API call");
-                usingProxy = false;
                 // Fall through to direct API call
             }
         }
         
         // Direct API call with user's key
-        if (!usingProxy) {
-            // Check if API key is provided
-            if (!apiKey) {
-                throw new Error('API key is required when proxy is unavailable');
+        // Check if API key is provided
+        if (!apiKey) {
+            throw new Error('API key is required when proxy is unavailable');
+        }
+        
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
+        
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Gemini API error: ${response.status} ${errorText}`);
             }
             
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
+            const data = await response.json();
+            const searchTermsText = data.candidates[0].content.parts[0].text.trim();
+            Logger.log(`Received search terms from Gemini API directly`);
             
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Gemini API error: ${response.status} ${errorText}`);
-                }
-                
-                const data = await response.json();
-                const searchTermsText = data.candidates[0].content.parts[0].text.trim();
-                Logger.log(`Received search terms from Gemini API directly`);
-                
-                // Parse the comma-separated search terms
-                const searchTerms = searchTermsText.split(',').map(term => term.trim());
-                return searchTerms;
-            } catch (error) {
-                Logger.log(`Error getting search terms: ${error.message}`);
-                throw error;
-            }
+            // Parse the comma-separated search terms
+            const searchTerms = searchTermsText.split(',').map(term => term.trim());
+            return searchTerms;
+        } catch (error) {
+            Logger.log(`Error getting search terms: ${error.message}`);
+            throw error;
         }
     };
 
@@ -354,13 +351,12 @@ const GeminiAPI = (() => {
             }
         };
 
-        // Try proxy first if we've been successful with it
+        // Try proxy first if enabled
         if (usingProxy) {
             try {
                 Logger.log("Attempting to use API proxy for image analysis...");
-                const proxyUrl = '/api/generateContent';
                 
-                const response = await fetch(proxyUrl, {
+                const response = await fetch(PROXY_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -383,57 +379,61 @@ const GeminiAPI = (() => {
             } catch (error) {
                 Logger.log(`Proxy request failed: ${error.message}`);
                 Logger.log("Falling back to direct API call");
-                usingProxy = false;
                 // Fall through to direct API call
             }
         }
         
         // Direct API call with user's key
-        if (!usingProxy) {
-            if (!apiKey) {
-                throw new Error('API key is required when proxy is unavailable');
-            }
-            
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Gemini API error: ${response.status} ${errorText}`);
-                }
-                
-                const data = await response.json();
-                const answerText = data.candidates[0].content.parts[0].text;
-                Logger.log(`Received response from Gemini API directly`);
-                
-                return answerText;
-            } catch (error) {
-                Logger.log(`Error analyzing images with Gemini: ${error.message}`);
-                throw error;
-            }
+        if (!apiKey) {
+            throw new Error('API key is required when proxy is unavailable');
         }
+        
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Gemini API error: ${response.status} ${errorText}`);
+            }
+            
+            const data = await response.json();
+            const answerText = data.candidates[0].content.parts[0].text;
+            Logger.log(`Received response from Gemini API directly`);
+            
+            return answerText;
+        } catch (error) {
+            Logger.log(`Error analyzing images with Gemini: ${error.message}`);
+            throw error;
+        }
+    };
+
+    // Methods to control proxy usage
+    const setUseProxy = (useProxy) => {
+        usingProxy = useProxy;
+        Logger.log(`Proxy usage set to: ${usingProxy}`);
     };
 
     return { 
         getSearchTerms, 
         analyzeImages,
+        setUseProxy,
         isUsingProxy: () => usingProxy 
     };
 })();
 
-// UI Module - Handles all UI interactions
+// UIController module - Add this line to define the module
 const UIController = (() => {
     let elements = {};
     
-    // Initialize UI elements
+    // Update the UIController.init method
     const init = (elementIds) => {
         elements = elementIds;
         
@@ -443,19 +443,47 @@ const UIController = (() => {
             const question = elements.userQuestionInput.value.trim();
             const apiKey = elements.apiKeyInput.value.trim();
             const selectedModel = elements.modelSelector.value;
+            const useProxy = elements.useProxyToggle ? elements.useProxyToggle.checked : true;
             
             if (!question) {
                 alert('Please enter a question');
                 return;
             }
             
-            if (!apiKey) {
-                alert('Please enter your Gemini API key');
+            // Only require API key if proxy is disabled
+            if (!useProxy && !apiKey) {
+                alert('Please enter your Gemini API key when not using the proxy');
                 return;
             }
             
+            // Set the proxy usage preference
+            GeminiAPI.setUseProxy(useProxy);
+            
             AppController.processQuestion(question, apiKey, selectedModel);
         });
+        
+        // Add proxy toggle functionality if it exists
+        if (elements.useProxyToggle) {
+            elements.useProxyToggle.addEventListener('change', (e) => {
+                const apiKeyField = elements.apiKeyInput;
+                const apiKeyContainer = apiKeyField.parentElement;
+                
+                if (e.target.checked) {
+                    // Using proxy, make API key optional
+                    apiKeyField.required = false;
+                    apiKeyContainer.classList.remove('required-field');
+                    apiKeyContainer.querySelector('label').innerHTML = 'API Key (optional)';
+                } else {
+                    // Not using proxy, make API key required
+                    apiKeyField.required = true;
+                    apiKeyContainer.classList.add('required-field');
+                    apiKeyContainer.querySelector('label').innerHTML = 'API Key (required)';
+                }
+            });
+            
+            // Trigger the change event to set the initial state
+            elements.useProxyToggle.dispatchEvent(new Event('change'));
+        }
         
         elements.toggleInfoBtn.addEventListener('click', () => {
             if (elements.infoContainer.style.display === 'none') {
@@ -514,6 +542,7 @@ const UIController = (() => {
         elements.loadingDiv.style.display = 'none';
         updateButtonState('initial');
     };
+    
     // Display error message
     const showError = (message) => {
         elements.responseContainer.innerHTML = `<p class="error">Error: ${message}</p>`;
@@ -531,83 +560,81 @@ const UIController = (() => {
     };
     
     // Format and display the final response
-// Format and display the final response
-// Update the displayResponse function in UIController to add scrolling
-const displayResponse = (question, formattedResponse) => {
-    const shareButtonsHtml = `
-        <div class="share-buttons" style="margin-top: 20px;">
-            <button id="share-btn" class="share-btn" style="background-color: #4285f4; color: white; border: none; padding: 8px 15px; margin-right: 10px; cursor: pointer; border-radius: 3px;">
-                Share this response
-            </button>
-            <div id="share-link" style="display: none; margin-top: 10px;">
-                <input type="text" id="share-url" readonly style="width: 80%; padding: 8px; margin-right: 10px;">
-                <button id="copy-link" style="background-color: #34a853; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 3px;">
-                    Copy
+    const displayResponse = (question, formattedResponse) => {
+        const shareButtonsHtml = `
+            <div class="share-buttons" style="margin-top: 20px;">
+                <button id="share-btn" class="share-btn" style="background-color: #4285f4; color: white; border: none; padding: 8px 15px; margin-right: 10px; cursor: pointer; border-radius: 3px;">
+                    Share this response
                 </button>
+                <div id="share-link" style="display: none; margin-top: 10px;">
+                    <input type="text" id="share-url" readonly style="width: 80%; padding: 8px; margin-right: 10px;">
+                    <button id="copy-link" style="background-color: #34a853; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 3px;">
+                        Copy
+                    </button>
+                </div>
             </div>
-        </div>
-    `;
-    
-    elements.responseContainer.innerHTML = `
-        <h2>Answer:</h2>
-        ${shareButtonsHtml}
-        <div>${formattedResponse}</div>
-    `;
-    
-    // Add event listeners to the share buttons
-    document.getElementById('share-btn').addEventListener('click', async () => {
-        try {
-            const shareBtn = document.getElementById('share-btn');
-            shareBtn.textContent = 'Generating link...';
-            shareBtn.disabled = true;
-            
-            const shareUrl = await AppController.shareResponse(question, formattedResponse);
-            
-            document.getElementById('share-url').value = shareUrl;
-            document.getElementById('share-link').style.display = 'block';
-            shareBtn.textContent = 'Share this response';
-            shareBtn.disabled = false;
-        } catch (error) {
-            alert(`Error sharing response: ${error.message}`);
-        }
-    });
-    
-    document.getElementById('copy-link').addEventListener('click', () => {
-        const shareUrl = document.getElementById('share-url');
-        shareUrl.select();
-        document.execCommand('copy');
-        alert('Link copied to clipboard!');
-    });
-    
-    // Render any math formulas if MathJax is available
-    if (window.MathJax) {
-        MathJax.typesetPromise([elements.responseContainer]).catch((err) => {
-            Logger.log(`Error rendering math: ${err.message}`);
+        `;
+        
+        elements.responseContainer.innerHTML = `
+            <h2>Answer:</h2>
+            ${shareButtonsHtml}
+            <div>${formattedResponse}</div>
+        `;
+        
+        // Add event listeners to the share buttons
+        document.getElementById('share-btn').addEventListener('click', async () => {
+            try {
+                const shareBtn = document.getElementById('share-btn');
+                shareBtn.textContent = 'Generating link...';
+                shareBtn.disabled = true;
+                
+                const shareUrl = await AppController.shareResponse(question, formattedResponse);
+                
+                document.getElementById('share-url').value = shareUrl;
+                document.getElementById('share-link').style.display = 'block';
+                shareBtn.textContent = 'Share this response';
+                shareBtn.disabled = false;
+            } catch (error) {
+                alert(`Error sharing response: ${error.message}`);
+            }
         });
-    }
+        
+        document.getElementById('copy-link').addEventListener('click', () => {
+            const shareUrl = document.getElementById('share-url');
+            shareUrl.select();
+            document.execCommand('copy');
+            alert('Link copied to clipboard!');
+        });
+        
+        // Render any math formulas if MathJax is available
+        if (window.MathJax) {
+            MathJax.typesetPromise([elements.responseContainer]).catch((err) => {
+                Logger.log(`Error rendering math: ${err.message}`);
+            });
+        }
 
-    // Scroll to the response container with a smooth animation
-    elements.responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Scroll to the response container with a smooth animation
+        elements.responseContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Highlight the response container briefly to draw attention
+        elements.responseContainer.style.transition = 'background-color 1s';
+        elements.responseContainer.style.backgroundColor = '#f0f8ff'; // Light blue highlight
+        
+        // Remove the highlight after 1.5 seconds
+        setTimeout(() => {
+            elements.responseContainer.style.backgroundColor = '#fafafa'; // Return to original color
+        }, 1500);
+    };
     
-    // Highlight the response container briefly to draw attention
-    elements.responseContainer.style.transition = 'background-color 1s';
-    elements.responseContainer.style.backgroundColor = '#f0f8ff'; // Light blue highlight
-    
-    // Remove the highlight after 1.5 seconds
-    setTimeout(() => {
-        elements.responseContainer.style.backgroundColor = '#fafafa'; // Return to original color
-    }, 1500);
-};
-    
-return { 
-    init, 
-    showLoading, 
-    hideLoading, 
-    showError, 
-    addImagePreview, 
-    displayResponse,
-    updateButtonState // Add this to the return object
-};
+    return { 
+        init, 
+        showLoading, 
+        hideLoading, 
+        showError, 
+        addImagePreview, 
+        displayResponse,
+        updateButtonState
+    };
 })();
 
 // App Controller - Main application logic
@@ -660,71 +687,73 @@ const AppController = (() => {
         }
     };
     // Process user's question
-    const processQuestion = async (question, apiKey, modelName) => {
-        try {
-            UIController.showLoading(); // Sets to "processing" state
-            
-            Logger.log(`Processing question: ${question}`);
-            
-            if (!apiKey) {
-                throw new Error('API key is required');
-            }
-    
-            // Get search terms from Gemini
-            const searchTerms = await GeminiAPI.getSearchTerms(question, apiKey);
-            Logger.log(`Using search terms: ${searchTerms.join(', ')}`);
-            
-            // Update UI state to "finding"
-            UIController.updateButtonState('finding');
-            
-            // Search Wikimedia for each term and collect results
-            Logger.log(`Searching Wikimedia for all terms in parallel`);
-            const searchPromises = searchTerms.map(term => WikimediaAPI.searchImages(term));
-            const searchResults = await Promise.all(searchPromises);
-            
-            // Flatten and limit results
-            let allImageResults = searchResults.flat();
-            if (allImageResults.length > 15) {
-                Logger.log(`Limiting results to 15 images from ${allImageResults.length} total results`);
-                allImageResults = allImageResults.slice(0, 15);
-            }
-            
-            if (allImageResults.length === 0) {
-                throw new Error('No images found on Wikimedia for the given search terms');
-            }
-            
-            Logger.log(`Found ${allImageResults.length} total image results`);
-    
-            // Get details for each image
-            const imageDetailsPromises = allImageResults.map(img => WikimediaAPI.getImageDetails(img.title));
-            const imageDetails = (await Promise.all(imageDetailsPromises)).filter(Boolean);
-            
-            Logger.log(`Successfully retrieved details for ${imageDetails.length} images`);
-    
-            // Process each image (convert SVGs to PNGs if needed)
-            const processedImages = await processImages(imageDetails);
-            
-            // Update UI state to "analyzing"
-            UIController.updateButtonState('analyzing');
-            
-            // Analyze images with Gemini
-            const geminiResponse = await GeminiAPI.analyzeImages(question, processedImages, apiKey, modelName);
-            
-            // Format the response
-            const formattedResponse = formatResponse(geminiResponse, processedImages);
+// Process user's question
+const processQuestion = async (question, apiKey, modelName) => {
+    try {
+        UIController.showLoading(); // Sets to "processing" state
         
-            // Display the response
-            UIController.displayResponse(question, formattedResponse);
-            
-            Logger.log('Question processing completed successfully!');
-        } catch (error) {
-            Logger.log(`Error: ${error.message}`);
-            UIController.hideLoading();
-            UIController.showError(error.message);
-        } finally {
-            UIController.hideLoading();
+        Logger.log(`Processing question: ${question}`);
+        
+        // Only require API key if proxy is disabled
+        if (!GeminiAPI.isUsingProxy() && !apiKey) {
+            throw new Error('API key is required when not using the proxy');
         }
-    };
+
+        // Get search terms from Gemini
+        const searchTerms = await GeminiAPI.getSearchTerms(question, apiKey);
+        Logger.log(`Using search terms: ${searchTerms.join(', ')}`);
+        
+        // Update UI state to "finding"
+        UIController.updateButtonState('finding');
+        
+        // Search Wikimedia for each term and collect results
+        Logger.log(`Searching Wikimedia for all terms in parallel`);
+        const searchPromises = searchTerms.map(term => WikimediaAPI.searchImages(term));
+        const searchResults = await Promise.all(searchPromises);
+        
+        // Flatten and limit results
+        let allImageResults = searchResults.flat();
+        if (allImageResults.length > 15) {
+            Logger.log(`Limiting results to 15 images from ${allImageResults.length} total results`);
+            allImageResults = allImageResults.slice(0, 15);
+        }
+        
+        if (allImageResults.length === 0) {
+            throw new Error('No images found on Wikimedia for the given search terms');
+        }
+        
+        Logger.log(`Found ${allImageResults.length} total image results`);
+
+        // Get details for each image
+        const imageDetailsPromises = allImageResults.map(img => WikimediaAPI.getImageDetails(img.title));
+        const imageDetails = (await Promise.all(imageDetailsPromises)).filter(Boolean);
+        
+        Logger.log(`Successfully retrieved details for ${imageDetails.length} images`);
+
+        // Process each image (convert SVGs to PNGs if needed)
+        const processedImages = await processImages(imageDetails);
+        
+        // Update UI state to "analyzing"
+        UIController.updateButtonState('analyzing');
+        
+        // Analyze images with Gemini
+        const geminiResponse = await GeminiAPI.analyzeImages(question, processedImages, apiKey, modelName);
+        
+        // Format the response
+        const formattedResponse = formatResponse(geminiResponse, processedImages);
+    
+        // Display the response
+        UIController.displayResponse(question, formattedResponse);
+        
+        Logger.log('Question processing completed successfully!');
+    } catch (error) {
+        Logger.log(`Error: ${error.message}`);
+        UIController.hideLoading();
+        UIController.showError(error.message);
+    } finally {
+        UIController.hideLoading();
+    }
+};
     
     // Process and prepare images for Gemini API
     const processImages = async (imageDetails) => {
@@ -788,14 +817,13 @@ const AppController = (() => {
         return processedImages;
     };
     
-    // Format the response from Gemini API
     const formatResponse = (geminiResponse, processedImages) => {
         // Extract image placeholders from the response
         const imagePlaceholders = {};
         const pattern = /\[\[\[(.*?)\]\]\]/g;
         let match;
         let formattedResponse = geminiResponse;
-
+    
         Logger.log("Extracting image placeholders from Gemini response");
         while ((match = pattern.exec(geminiResponse)) !== null) {
             const placeholder = match[0]; // The full [[[filename.png]]] match
@@ -803,10 +831,10 @@ const AppController = (() => {
             imagePlaceholders[placeholder] = filename;
             Logger.log(`Found image placeholder: ${placeholder} -> ${filename}`);
         }
-
+    
         // Log the extracted placeholders for debugging
         Logger.log(`Extracted ${Object.keys(imagePlaceholders).length} image placeholders`);
-
+    
         // First replace our special image placeholders with actual images
         Object.entries(imagePlaceholders).forEach(([placeholder, filename]) => {
             // More flexible matching - normalize both strings and try different forms
@@ -848,9 +876,15 @@ const AppController = (() => {
                     })
                     .join('<br>');
                 
+                // Clean the alt text by removing newlines and quotes
+                const cleanAltText = (img.altText || 'Image from Wikimedia Commons')
+                    .replace(/\r?\n|\r/g, ' ')  // Replace newlines with spaces
+                    .replace(/"/g, '&quot;')     // Replace quotes with HTML entities
+                    .replace(/'/g, '&#39;');     // Replace apostrophes with HTML entities
+                
                 // Use the original Wikimedia URL instead of base64
                 const imgTag = `<figure style="margin: 20px 0;">
-                    <img src="${img.url}" alt="${img.altText || 'Image from Wikimedia Commons'}" style="width:100%; border-radius:5px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                    <img src="${img.url}" alt="${cleanAltText}" style="width:100%; border-radius:5px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
                     <figcaption style="font-style:italic; font-size:0.9em; color:#555; margin-top:5px;">
                         ${figcaption}
                     </figcaption>
@@ -882,7 +916,8 @@ document.addEventListener('DOMContentLoaded', () => {
         apiKeyInput: document.getElementById('api-key'),
         toggleInfoBtn: document.getElementById('toggle-info'),
         infoContainer: document.getElementById('info-container'),
-        modelSelector: document.getElementById('model-selector') // Add this line
+        modelSelector: document.getElementById('model-selector'), // Add this line
+        useProxyToggle: document.getElementById('use-proxy-toggle')
     };
     
     // Initialize modules
