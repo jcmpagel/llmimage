@@ -228,14 +228,16 @@ const WikimediaAPI = (() => {
 })();
 
 // GeminiAPI Module - Handles interactions with Gemini API
+// GeminiAPI Module - Handles interactions with Gemini API
 const GeminiAPI = (() => {
+    // Flag to track if we're using the proxy or direct API
+    let usingProxy = true;
+    
     // Get search terms from Gemini API
     const getSearchTerms = async (question, apiKey) => {
         Logger.log(`Getting search terms for question: ${question}`);
         
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
         const promptText = PROMPTS.SEARCH_TERMS.replace('{question}', question);
-        
         const requestData = {
             contents: [{
                 parts: [{
@@ -244,34 +246,80 @@ const GeminiAPI = (() => {
             }]
         };
         
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Gemini API error: ${response.status} ${errorText}`);
+        // Try the proxy first if no API key is provided
+        if (usingProxy) {
+            try {
+                Logger.log("Attempting to use API proxy...");
+                const proxyUrl = '/api/generateContent'; // Your Cloudflare Worker route
+                
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'gemini-2.0-flash-lite',
+                        data: requestData
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Proxy error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const searchTermsText = data.candidates[0].content.parts[0].text.trim();
+                Logger.log(`Successfully used API proxy`);
+                
+                // Parse the comma-separated search terms
+                const searchTerms = searchTermsText.split(',').map(term => term.trim());
+                return searchTerms;
+            } catch (error) {
+                Logger.log(`Proxy request failed: ${error.message}`);
+                Logger.log("Falling back to direct API call");
+                usingProxy = false;
+                // Fall through to direct API call
+            }
+        }
+        
+        // Direct API call with user's key
+        if (!usingProxy) {
+            // Check if API key is provided
+            if (!apiKey) {
+                throw new Error('API key is required when proxy is unavailable');
             }
             
-            const data = await response.json();
-            const searchTermsText = data.candidates[0].content.parts[0].text.trim();
-            Logger.log(`Received search terms from Gemini: ${searchTermsText}`);
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
             
-            // Parse the comma-separated search terms
-            const searchTerms = searchTermsText.split(',').map(term => term.trim());
-            return searchTerms;
-        } catch (error) {
-            Logger.log(`Error getting search terms: ${error.message}`);
-            throw error;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Gemini API error: ${response.status} ${errorText}`);
+                }
+                
+                const data = await response.json();
+                const searchTermsText = data.candidates[0].content.parts[0].text.trim();
+                Logger.log(`Received search terms from Gemini API directly`);
+                
+                // Parse the comma-separated search terms
+                const searchTerms = searchTermsText.split(',').map(term => term.trim());
+                return searchTerms;
+            } catch (error) {
+                Logger.log(`Error getting search terms: ${error.message}`);
+                throw error;
+            }
         }
     };
 
-    // Analyze images with Gemini
+    // Analyze images with Gemini - similar approach with proxy first, then fallback
     const analyzeImages = async (question, imageData, apiKey, modelName = 'gemini-2.0-flash') => {
         Logger.log(`Analyzing ${imageData.length} images with Gemini model: ${modelName}`);
         
@@ -292,7 +340,6 @@ const GeminiAPI = (() => {
         ).join('\n\n');
 
         // Construct the full request to Gemini
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
         const requestData = {
             contents: [{
                 parts: [
@@ -307,32 +354,79 @@ const GeminiAPI = (() => {
             }
         };
 
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Gemini API error: ${response.status} ${errorText}`);
+        // Try proxy first if we've been successful with it
+        if (usingProxy) {
+            try {
+                Logger.log("Attempting to use API proxy for image analysis...");
+                const proxyUrl = '/api/generateContent';
+                
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: modelName,
+                        data: requestData
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Proxy error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const answerText = data.candidates[0].content.parts[0].text;
+                Logger.log(`Successfully used API proxy for image analysis`);
+                
+                return answerText;
+            } catch (error) {
+                Logger.log(`Proxy request failed: ${error.message}`);
+                Logger.log("Falling back to direct API call");
+                usingProxy = false;
+                // Fall through to direct API call
+            }
+        }
+        
+        // Direct API call with user's key
+        if (!usingProxy) {
+            if (!apiKey) {
+                throw new Error('API key is required when proxy is unavailable');
             }
             
-            const data = await response.json();
-            const answerText = data.candidates[0].content.parts[0].text;
-            Logger.log(`Received response from Gemini`);
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             
-            return answerText;
-        } catch (error) {
-            Logger.log(`Error analyzing images with Gemini: ${error.message}`);
-            throw error;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Gemini API error: ${response.status} ${errorText}`);
+                }
+                
+                const data = await response.json();
+                const answerText = data.candidates[0].content.parts[0].text;
+                Logger.log(`Received response from Gemini API directly`);
+                
+                return answerText;
+            } catch (error) {
+                Logger.log(`Error analyzing images with Gemini: ${error.message}`);
+                throw error;
+            }
         }
     };
 
-    return { getSearchTerms, analyzeImages };
+    return { 
+        getSearchTerms, 
+        analyzeImages,
+        isUsingProxy: () => usingProxy 
+    };
 })();
 
 // UI Module - Handles all UI interactions
